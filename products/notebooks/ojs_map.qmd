@@ -39,31 +39,31 @@ recommendations_per_country['worldatlas_match'] = [worldatlas_names.name[worldat
 ojs_define(recommendations_per_country = recommendations_per_country)
 
 ```
-```{ojs}
-import { aq, op } from '@uwdata/arquero'
-// import { csv } from 'd3'
-
-// base_url = '/Users/Stefan/Documents/GIT_REPOS/UNCEDAW_dashboard/'
-// response = await fetch(base_url + 'data/GLOBAL_dataset_180124_V7/COMPLETE_DATASET.csv')
-// text = await response.text()
-// data = csv.parse(text)
-// data = aq.fromCSV(csv.parse(text))
-// data = aq.loadCSV(recommendations_per_country)
-aq.table(recommendations_per_country).view()
-```
 
 ```{ojs}
 //| output: false
+
+import { aq, op } from '@uwdata/arquero'
+
 country50m = await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json").then(response => response.json())
 
 countrymesh = topojson.feature(country50m, country50m.objects.countries)
 ```
 ```{ojs}
+//| output: true
 Plot.plot({
   projection: "equirectangular",
   width,
+  color: {scheme: "YlGnBu", unknown: "#ccc", label: "Number of recommendations", legend: true},
   marks: [
-      Plot.geo(countrymesh, { fill: "#000", stroke: "white"}),
+      Plot.geo(countrymesh, { fill: country50m.objects.countries.geometries.map(c => {
+    const countryName = c.properties.name;
+    const matchingCountry = aq.table(recommendations_per_country)
+        .params({ countryName })
+        .filter(d => d.worldatlas_match === countryName)
+        .objects();
+    return matchingCountry.length > 0 ? matchingCountry[0]['CEDAW RECOMMENDATION'] : null;
+})}),
   ]
 });
 ```
