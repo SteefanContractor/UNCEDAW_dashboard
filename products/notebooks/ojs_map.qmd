@@ -16,11 +16,31 @@ assert set(data.COUNTRY) == set(countries.COUNTRY)
 # Calculate the number of recommendations per country
 recommendations_per_country = data.groupby('COUNTRY')['CEDAW RECOMMENDATION'].count().reset_index()
 
-ojs_define(recommendations_per_country = recommendations_per_country)
+# replace DEMOCRATIC REPUBLIC OF KOREA and REPUBLIC OF KOREA with SOUTH KOREA and remove TUVALU
+recommendations_per_country.COUNTRY[recommendations_per_country.COUNTRY.str.contains('KOREA')] = 'SOUTH KOREA'
+recommendations_per_country = recommendations_per_country[recommendations_per_country.COUNTRY != 'TUVALU']
 ```
 
+```{python}
+#| output: false
+import requests
+import json
+import difflib
+
+country50m_json = requests.get("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json").json()
+
+worldatlas_names = pd.DataFrame({'name': [x['properties']['name'] for x in country50m_json['objects']['countries']['geometries']]})
+worldatlas_names['uppername'] = worldatlas_names.name.str.upper()
+recommendations_per_country['worldatlas_match'] = [difflib.get_close_matches(COUNTRY, worldatlas_names) for COUNTRY in recommendations_per_country['COUNTRY']]
+
+recommendations_per_country['worldatlas_match'] = [worldatlas_names.name[worldatlas_names.uppername == difflib.get_close_matches(COUNTRY, worldatlas_names.uppername, n=1)[0]].values[0] for COUNTRY in recommendations_per_country['COUNTRY']]
+
+
+ojs_define(recommendations_per_country = recommendations_per_country)
+
+```
 ```{ojs}
-// import { aq, op } from '@uwdata/arquero'
+import { aq, op } from '@uwdata/arquero'
 // import { csv } from 'd3'
 
 // base_url = '/Users/Stefan/Documents/GIT_REPOS/UNCEDAW_dashboard/'
@@ -29,5 +49,21 @@ ojs_define(recommendations_per_country = recommendations_per_country)
 // data = csv.parse(text)
 // data = aq.fromCSV(csv.parse(text))
 // data = aq.loadCSV(recommendations_per_country)
-recommendations_per_country
+aq.table(recommendations_per_country).view()
+```
+
+```{ojs}
+//| output: false
+country50m = await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json").then(response => response.json())
+
+countrymesh = topojson.feature(country50m, country50m.objects.countries)
+```
+```{ojs}
+Plot.plot({
+  projection: "equirectangular",
+  width,
+  marks: [
+      Plot.geo(countrymesh, { fill: "#000", stroke: "white"}),
+  ]
+});
 ```
