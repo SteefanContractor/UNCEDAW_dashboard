@@ -1,0 +1,33 @@
+---
+title: "UN CEDAW Gender Based Violence Report"
+format: dashboard
+# execute-dir: 'www'
+---
+
+```{python}
+#| output: false
+import pandas as pd
+
+data = pd.read_csv('../../data/GLOBAL_dataset_180124_V7/COMPLETE_DATASET.csv')
+data.dropna(subset=['COUNTRY'], inplace=True)
+countries = pd.read_csv('../../data/GLOBAL_dataset_180124_V7/countries.csv',usecols=['COUNTRY'])
+assert set(data.COUNTRY) == set(countries.COUNTRY)
+
+# Calculate the number of recommendations per country
+recommendations_per_country = data.groupby('COUNTRY')['CEDAW RECOMMENDATION'].count().reset_index()
+
+ojs_define(recommendations_per_country = recommendations_per_country)
+```
+
+```{ojs}
+// import { aq, op } from '@uwdata/arquero'
+// import { csv } from 'd3'
+
+// base_url = '/Users/Stefan/Documents/GIT_REPOS/UNCEDAW_dashboard/'
+// response = await fetch(base_url + 'data/GLOBAL_dataset_180124_V7/COMPLETE_DATASET.csv')
+// text = await response.text()
+// data = csv.parse(text)
+// data = aq.fromCSV(csv.parse(text))
+// data = aq.loadCSV(recommendations_per_country)
+recommendations_per_country
+```
