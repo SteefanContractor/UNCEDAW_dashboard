@@ -3,7 +3,6 @@ title: "UN CEDAW Report"
 format: 
   dashboard:
     orientation: columns
-# execute-dir: 'www'
 ---
 
 # Visualization
