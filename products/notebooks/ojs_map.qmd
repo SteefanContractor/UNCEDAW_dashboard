@@ -1,43 +1,47 @@
 ---
-title: "UN CEDAW Gender Based Violence Report"
-format: dashboard
+title: "UN CEDAW Report"
+format: 
+  dashboard:
+    orientation: columns
 # execute-dir: 'www'
 ---
+
+# Visualization
+
+## Row
+
+*Data description*
+
+*Instructions*: Click on a country below to see a table of latest CEDAW recommendations and corresponding responses from that country. 
 
 ```{python}
 #| output: false
 import pandas as pd
-
-data = pd.read_csv('../../data/GLOBAL_dataset_180124_V7/COMPLETE_DATASET.csv')
-data.dropna(subset=['COUNTRY'], inplace=True)
-countries = pd.read_csv('../../data/GLOBAL_dataset_180124_V7/countries.csv',usecols=['COUNTRY'])
-assert set(data.COUNTRY) == set(countries.COUNTRY)
-
-# Calculate the number of recommendations per country
-recommendations_per_country = data.groupby('COUNTRY')['CEDAW RECOMMENDATION'].count().reset_index()
-
-# replace DEMOCRATIC REPUBLIC OF KOREA and REPUBLIC OF KOREA with SOUTH KOREA and remove TUVALU
-recommendations_per_country.COUNTRY[recommendations_per_country.COUNTRY.str.contains('KOREA')] = 'SOUTH KOREA'
-recommendations_per_country = recommendations_per_country[recommendations_per_country.COUNTRY != 'TUVALU']
-```
-
-```{python}
-#| output: false
 import requests
 import json
 import difflib
+
+data = pd.read_csv('https://raw.githubusercontent.com/SteefanContractor/UNCEDAW_dashboard/main/data/GLOBAL_dataset_180124_V7/COMPLETE_DATASET.csv')#../../data/GLOBAL_dataset_180124_V7/COMPLETE_DATASET.csv')
+data.dropna(subset=['COUNTRY'], inplace=True)
+countries = pd.read_csv('https://raw.githubusercontent.com/SteefanContractor/UNCEDAW_dashboard/main/data/GLOBAL_dataset_180124_V7/countries.csv',usecols=['COUNTRY'])
+assert set(data.COUNTRY) == set(countries.COUNTRY)
+
+# replace DEMOCRATIC REPUBLIC OF KOREA and REPUBLIC OF KOREA with SOUTH KOREA and remove TUVALU
+data.COUNTRY[data.COUNTRY.str.contains('KOREA')] = 'SOUTH KOREA'
+data = data[data.COUNTRY != 'TUVALU']
 
 country50m_json = requests.get("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json").json()
 
 worldatlas_names = pd.DataFrame({'name': [x['properties']['name'] for x in country50m_json['objects']['countries']['geometries']]})
 worldatlas_names['uppername'] = worldatlas_names.name.str.upper()
-recommendations_per_country['worldatlas_match'] = [difflib.get_close_matches(COUNTRY, worldatlas_names) for COUNTRY in recommendations_per_country['COUNTRY']]
+data['worldatlas_match'] = [difflib.get_close_matches(COUNTRY, worldatlas_names) for COUNTRY in data['COUNTRY']]
 
-recommendations_per_country['worldatlas_match'] = [worldatlas_names.name[worldatlas_names.uppername == difflib.get_close_matches(COUNTRY, worldatlas_names.uppername, n=1)[0]].values[0] for COUNTRY in recommendations_per_country['COUNTRY']]
+data['worldatlas_match'] = [worldatlas_names.name[worldatlas_names.uppername == difflib.get_close_matches(COUNTRY, worldatlas_names.uppername, n=1)[0]].values[0] for COUNTRY in data['COUNTRY']]
 
+# Calculate the number of recommendations per country
+recommendations_per_country = data.groupby('worldatlas_match')['CEDAW RECOMMENDATION'].count().reset_index()
 
-ojs_define(recommendations_per_country = recommendations_per_country)
-
+ojs_define(data = data, recommendations_per_country = recommendations_per_country)
 ```
 
 ```{ojs}
@@ -48,15 +52,26 @@ import { aq, op } from '@uwdata/arquero'
 country50m = await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json").then(response => response.json())
 
 countrymesh = topojson.feature(country50m, country50m.objects.countries)
+countries = countrymesh.features
+
+mutable clickloc = []
+
+// d3 equirectangular projection
+proj = d3.geoEquirectangular().fitSize([cards.map.width, cards.map.height], countrymesh)
 ```
+
 ```{ojs}
 //| output: true
-Plot.plot({
-  projection: "equirectangular",
-  width,
+//| label: map
+
+
+plot = {
+  mutable clickloc = [143.445437, -26.903923]
+  const result = Plot.plot({
+  projection: proj,
   color: {scheme: "YlGnBu", unknown: "#ccc", label: "Number of recommendations", legend: true},
   marks: [
-      Plot.geo(countrymesh, { fill: country50m.objects.countries.geometries.map(c => {
+      Plot.geo(countrymesh, { fill: countries.map(c => {
     const countryName = c.properties.name;
     const matchingCountry = aq.table(recommendations_per_country)
         .params({ countryName })
@@ -64,6 +79,95 @@ Plot.plot({
         .objects();
     return matchingCountry.length > 0 ? matchingCountry[0]['CEDAW RECOMMENDATION'] : null;
 })}),
-  ]
-});
+
+    Plot.tip(countries, Plot.pointer(Plot.geoCentroid({title: (d) => d.properties.name, anchor: "bottom", textPadding: 3})))
+]});
+
+  result.onclick = function(evt) {
+    const width = Number(result.getAttribute("width"));
+    const height = Number(result.getAttribute("height"));
+    mutable clickloc = proj.invert([evt.offsetX, evt.offsetY]);
+  }
+
+  return result;
+}
+```
+
+## Row
+
+```{ojs}
+//| output: true 
+//| error: false
+//| warning: false
+
+md`*Instructions*: Click on the radio button in the first column of the table below to see the entire recommendation + action. The row colour represents the state action classification, with green indicating that the recommendation was implemented, yellow indicating a partial implementation, orange indicating a lack of acknowledgement, and red indicating that the recommendation was not implemented.`
+
+  // import { booleanPointInPolygon } from '@turf/boolean-point-in-polygon'
+  turf = require("@turf/turf@6")
+
+  import {colorTable} from "@mootari/colored-table-rows"
+  clickedPoly = countries.map((d) => turf.booleanPointInPolygon(clickloc, d))
+  // countries
+  clickedCountry = countries.filter((country, index) => clickedPoly[index])[0].properties.name
+  // clickedCountry
+
+  datatable = aq.table(data)
+                .derive({rowColor: d => {
+                  switch (d['IMPLEMENTATION STATUS ']) {
+                    case "Implemented":
+                      return 'green';
+                    case 'Partial':
+                      return 'yellow';
+                    case 'Unacknowledged':
+                      return 'orange';
+                    default:
+                      return 'red';
+                }}})
+                .params({clickedCountry})
+                .filter((d) => d.worldatlas_match === clickedCountry)
+                .select('CEDAW RECOMMENDATION', 'STATE ACTION','rowColor')
+
+
+viewof tableselection = colorTable(datatable,
+  {
+    colorColumn: 'rowColor',
+    layout: 'fixed',
+    multiple: false
+  }
+)
+  // {colorColumn: "rowColor"})
+```
+
+```{ojs}
+//| error: false
+//| warning: false
+
+selection = tableselection===null ? datatable.slice(0,1) : tableselection
+htl.html`<h3 style="text-align: center;">CEDAW RECOMMENDATION</h3>`
+htl.html`<p>${selection['CEDAW RECOMMENDATION']}`
+htl.html`<h3 style="text-align: center;">STATE ACTION</h3>`
+htl.html`<p>${selection['STATE ACTION']}`
+
+```
+
+# Data
+
+## Row 
+
+```{ojs}
+//| height: 80
+// btn = document.createElement('button')
+// btn.setAttribute('type', 'submit')
+// btn.setAttribute('onclick', "window.open('https://raw.githubusercontent.com/SteefanContractor/UNCEDAW_dashboard/main/data/GLOBAL_dataset_180124_V7/COMPLETE_DATASET.csv')")
+htl.html`
+<form method="get" action="https://raw.githubusercontent.com/SteefanContractor/UNCEDAW_dashboard/main/data/GLOBAL_dataset_180124_V7/COMPLETE_DATASET.csv">
+   <button type="submit">Download</button>
+</form>`
+```
+```{ojs}
+Inputs.table(aq.table(data).select(aq.range(0,6)), {
+  rows: 1000,
+  maxHeight: 800,
+  layout: "auto"
+})
 ```
