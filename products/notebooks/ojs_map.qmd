@@ -40,7 +40,12 @@ data['worldatlas_match'] = [worldatlas_names.name[worldatlas_names.uppername == 
 # Calculate the number of recommendations per country
 recommendations_per_country = data.groupby('worldatlas_match')['CEDAW RECOMMENDATION'].count().reset_index()
 
-ojs_define(data = data, recommendations_per_country = recommendations_per_country)
+# create a column of GBV categories
+GBV_columns = ['Violence','Forced','Sexual harassment','IPV','Femicide','FGM','Stalking','Rape','Forced marriage','Combined GBV']
+data['GBV_category'] = data[GBV_columns].idxmax(axis=1)
+data.drop(columns=GBV_columns, inplace=True)
+
+ojs_define(pydata = data)
 ```
 
 ```{ojs}
@@ -60,6 +65,15 @@ proj = d3.geoEquirectangular().fitSize([cards.map.width, cards.map.height], coun
 ```
 
 ```{ojs}
+//| height: 80 
+
+viewof GBV_category = Inputs.select(['Combined GBV','Violence','Forced','Sexual harassment','IPV','Femicide','FGM','Stalking','Rape','Forced marriage'], {label: "GBV Category"})
+data = GBV_category === 'Combined GBV' ? aq.table(pydata) : aq.table(pydata).params({GBV_category}).filter(d => op.equal(d.GBV_category, GBV_category))
+recommendations_per_country = data.groupby('worldatlas_match').rollup({numRecs: op.count()})
+```
+
+
+```{ojs}
 //| output: true
 //| label: map
 
@@ -72,11 +86,11 @@ plot = {
   marks: [
       Plot.geo(countrymesh, { fill: countries.map(c => {
     const countryName = c.properties.name;
-    const matchingCountry = aq.table(recommendations_per_country)
+    const matchingCountry = recommendations_per_country
         .params({ countryName })
         .filter(d => d.worldatlas_match === countryName)
         .objects();
-    return matchingCountry.length > 0 ? matchingCountry[0]['CEDAW RECOMMENDATION'] : null;
+    return matchingCountry.length > 0 ? matchingCountry[0]['numRecs'] : null;
 })}),
 
     Plot.tip(countries, Plot.pointer(Plot.geoCentroid({title: (d) => d.properties.name, anchor: "bottom", textPadding: 3})))
@@ -110,7 +124,7 @@ md`*Instructions*: Click on the radio button in the first column of the table be
   clickedCountry = countries.filter((country, index) => clickedPoly[index])[0].properties.name
   // clickedCountry
 
-  datatable = aq.table(data)
+  datatable = data
                 .derive({rowColor: d => {
                   switch (d['IMPLEMENTATION STATUS ']) {
                     case "Implemented":
